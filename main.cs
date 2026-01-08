@@ -12,18 +12,17 @@ namespace RouteForwarder
 {
     public partial class MainForm : Form
     {
-        private ComboBox cbInterface, cbGateway, cbRouteList, cbAction;
-        private CheckBox chkForward, chkExtra;
-        private TextBox txtExtraRoutes;
-        private Button btnPrint, btnExecute;
+        // 加上 ? 表示这些字段可以暂时为 null，消除 CS8618 警告
+        private ComboBox? cbInterface, cbGateway, cbRouteList, cbAction;
+        private CheckBox? chkForward, chkExtra;
+        private TextBox? txtExtraRoutes;
+        private Button? btnPrint, btnExecute;
         
-        // 托盘相关组件
-        private NotifyIcon trayIcon;
-        private ContextMenuStrip trayMenu;
+        private NotifyIcon? trayIcon;
+        private ContextMenuStrip? trayMenu;
 
         public MainForm()
         {
-            // --- 界面初始化 ---
             this.Font = new Font("Tahoma", 8.25F);
             this.Text = "RouteForwarder - 永久路由版";
             this.ClientSize = new Size(480, 320);
@@ -31,10 +30,10 @@ namespace RouteForwarder
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // 初始化托盘图标
+            // 1. 先初始化托盘
             InitTrayIcon();
 
-            // 控件布局 (保持之前的复刻样式)
+            // 2. 初始化控件
             chkForward = new CheckBox() { Text = "路由转发", Left = 180, Top = 12, AutoSize = true, Checked = true };
             chkExtra = new CheckBox() { Text = "额外路由条目", Left = 280, Top = 12, AutoSize = true, Checked = true };
 
@@ -79,7 +78,6 @@ namespace RouteForwarder
                 Process.Start(psi);
             };
 
-            // 关键：拦截关闭按钮事件
             this.FormClosing += MainForm_FormClosing;
         }
 
@@ -87,42 +85,40 @@ namespace RouteForwarder
         {
             trayMenu = new ContextMenuStrip();
             trayMenu.Items.Add("显示界面", null, (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; });
-            trayMenu.Items.Add("退出程序", null, (s, e) => { trayIcon.Visible = false; Environment.Exit(0); });
+            trayMenu.Items.Add("退出程序", null, (s, e) => { if (trayIcon != null) trayIcon.Visible = false; Environment.Exit(0); });
 
             trayIcon = new NotifyIcon()
             {
                 Text = "RouteForwarder",
-                Icon = SystemIcons.Application, // 使用系统默认图标，你也可以之后换成自定义 ico
+                Icon = SystemIcons.Application,
                 ContextMenuStrip = trayMenu,
                 Visible = true
             };
             
-            // 双击托盘图标恢复窗口
             trayIcon.DoubleClick += (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; };
         }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            // 如果用户点击的是关闭按钮 (CloseReason.UserClosing)
             if (e.CloseReason == CloseReason.UserClosing)
             {
                 var result = MessageBox.Show("是否最小化到系统托盘？\n(点击“否”将完全退出)", "退出提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                 
                 if (result == DialogResult.Yes)
                 {
-                    e.Cancel = true; // 取消关闭事件
-                    this.Hide();     // 隐藏窗口
+                    e.Cancel = true;
+                    this.Hide();
                 }
                 else if (result == DialogResult.Cancel)
                 {
-                    e.Cancel = true; // 什么也不做
+                    e.Cancel = true;
                 }
-                // 如果点“否”，则不取消 e.Cancel，程序正常关闭
             }
         }
 
         private void FillGatewayOptions()
         {
+            if (cbGateway == null) return;
             try {
                 var gateways = NetworkInterface.GetAllNetworkInterfaces()
                     .Where(n => n.OperationalStatus == OperationalStatus.Up)
@@ -142,6 +138,8 @@ namespace RouteForwarder
 
         private async void ExecuteAction(object? sender, EventArgs e)
         {
+            if (cbAction == null || cbGateway == null || txtExtraRoutes == null || btnExecute == null) return;
+
             string action = cbAction.Text == "添加路由" ? "add" : "delete";
             string gw = cbGateway.Text;
             string[] lines = txtExtraRoutes.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -169,7 +167,7 @@ namespace RouteForwarder
 
             btnExecute.Enabled = true;
             btnExecute.Text = "执行";
-            MessageBox.Show("执行完毕！");
+            MessageBox.Show("执行完毕！路由已持久化。");
         }
 
         private void RunCmd(string fileName, string args)
