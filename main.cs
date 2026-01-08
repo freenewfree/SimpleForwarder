@@ -5,6 +5,8 @@ using System.Net;
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Linq;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace RouteForwarder
 {
@@ -17,95 +19,134 @@ namespace RouteForwarder
 
         public MainForm()
         {
+            // --- 界面初始化 ---
+            this.Font = new Font("Tahoma", 8.25F);
             this.Text = "RouteForwarder - 路由转发工具";
-            this.Size = new Size(550, 400);
+            this.ClientSize = new Size(480, 320);
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // 顶部复选框
-            chkForward = new CheckBox() { Text = "路由转发", Left = 200, Top = 10, AutoSize = true };
-            chkExtra = new CheckBox() { Text = "额外路由条目", Left = 310, Top = 10, AutoSize = true, Checked = true };
+            // 复选框
+            chkForward = new CheckBox() { Text = "路由转发", Left = 180, Top = 12, AutoSize = true, Checked = true };
+            chkExtra = new CheckBox() { Text = "额外路由条目", Left = 280, Top = 12, AutoSize = true, Checked = true };
 
-            // 左侧标签与下拉框
-            Label lbl1 = new Label() { Text = "网卡接口:", Left = 20, Top = 45, Width = 80 };
-            cbInterface = new ComboBox() { Left = 100, Top = 42, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-            cbInterface.Items.Add("WLAN"); cbInterface.SelectedIndex = 0;
+            // 左侧参数区
+            int labelLeft = 15, comboLeft = 85, spacing = 32;
+            
+            Label lbl1 = new Label() { Text = "网卡接口:", Left = labelLeft, Top = 48, Width = 65 };
+            cbInterface = new ComboBox() { Left = comboLeft, Top = 45, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
+            cbInterface.Items.Add("WLAN"); 
+            cbInterface.Items.Add("以太网");
+            cbInterface.SelectedIndex = 0;
 
-            Label lbl2 = new Label() { Text = "默认网关:", Left = 20, Top = 85, Width = 80 };
-            cbGateway = new ComboBox() { Left = 100, Top = 82, Width = 200 };
-            cbGateway.Text = GetDefaultGateway();
-
-            Label lbl3 = new Label() { Text = "路由条目:", Left = 20, Top = 125, Width = 80 };
-            cbRouteList = new ComboBox() { Left = 100, Top = 122, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            Label lbl2 = new Label() { Text = "默认网关:", Left = labelLeft, Top = 48 + spacing, Width = 65 };
+            cbGateway = new ComboBox() { Left = comboLeft, Top = 45 + spacing, Width = 180 };
+            
+            Label lbl3 = new Label() { Text = "路由条目:", Left = labelLeft, Top = 48 + spacing * 2, Width = 65 };
+            cbRouteList = new ComboBox() { Left = comboLeft, Top = 45 + spacing * 2, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
             cbRouteList.Items.Add("china_ip_list.txt"); cbRouteList.SelectedIndex = 0;
 
-            Label lbl4 = new Label() { Text = "路由动作:", Left = 20, Top = 165, Width = 80 };
-            cbAction = new ComboBox() { Left = 100, Top = 162, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            Label lbl4 = new Label() { Text = "路由动作:", Left = labelLeft, Top = 48 + spacing * 3, Width = 65 };
+            cbAction = new ComboBox() { Left = comboLeft, Top = 45 + spacing * 3, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
             cbAction.Items.AddRange(new string[] { "添加路由", "删除路由" }); cbAction.SelectedIndex = 0;
 
-            // 底部按钮
-            btnPrint = new Button() { Text = "查看路由表", Left = 40, Top = 240, Width = 110, Height = 35 };
-            btnExecute = new Button() { Text = "执行", Left = 180, Top = 240, Width = 110, Height = 35 };
+            // 按钮
+            btnPrint = new Button() { Text = "查看路由表", Left = 35, Top = 210, Width = 100, Height = 30 };
+            btnExecute = new Button() { Text = "执行", Left = 160, Top = 210, Width = 100, Height = 30 };
 
             // 右侧文本框
             txtExtraRoutes = new TextBox() { 
-                Left = 310, Top = 42, Width = 200, Height = 233, 
+                Left = 285, Top = 45, Width = 175, Height = 195, 
                 Multiline = true, ScrollBars = ScrollBars.Both,
+                Font = new Font("Consolas", 8F),
                 Text = "114.114.114.114\r\n223.5.5.5\r\n8.8.8.8\r\nwww.msftconnecttest.com"
             };
 
-            // 底部链接
-            LinkLabel link = new LinkLabel() { Text = "https://youtube.com/@bulianglin", Left = 20, Top = 310, Width = 300 };
+            LinkLabel link = new LinkLabel() { Text = "https://youtube.com/@bulianglin", Left = 15, Top = 285, Width = 250 };
 
             this.Controls.AddRange(new Control[] { chkForward, chkExtra, lbl1, cbInterface, lbl2, cbGateway, lbl3, cbRouteList, lbl4, cbAction, btnPrint, btnExecute, txtExtraRoutes, link });
 
+            // 填充网关数据
+            FillGatewayOptions();
+
+            // 事件绑定
             btnExecute.Click += ExecuteAction;
             btnPrint.Click += (s, e) => Process.Start("cmd", "/c route print & pause");
         }
 
-        private string GetDefaultGateway()
+        private void FillGatewayOptions()
         {
-            return NetworkInterface.GetAllNetworkInterfaces()
-                .Where(n => n.OperationalStatus == OperationalStatus.Up)
-                .SelectMany(n => n.GetIPProperties().GatewayAddresses)
-                .Select(g => g.Address.ToString())
-                .FirstOrDefault() ?? "192.168.1.1";
+            try {
+                var gateways = NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(n => n.OperationalStatus == OperationalStatus.Up)
+                    .SelectMany(n => n.GetIPProperties().GatewayAddresses)
+                    .Select(g => g.Address.ToString())
+                    .Where(g => g != "0.0.0.0")
+                    .ToList();
+
+                cbGateway.Items.Clear();
+                foreach (var gw in gateways) cbGateway.Items.Add(gw);
+
+                // 优先选择 IPv4 网关（包含点的地址）
+                string v4Gateway = gateways.FirstOrDefault(g => g.Contains("."));
+                if (v4Gateway != null) cbGateway.Text = v4Gateway;
+                else if (gateways.Count > 0) cbGateway.SelectedIndex = 0;
+            } catch { cbGateway.Text = "192.168.1.1"; }
         }
 
-        private async void ExecuteAction(object? sender, EventArgs e)
+        private async void ExecuteAction(object sender, EventArgs e)
         {
             string action = cbAction.Text == "添加路由" ? "add" : "delete";
             string gw = cbGateway.Text;
             string[] lines = txtExtraRoutes.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
+            btnExecute.Enabled = false;
+            btnExecute.Text = "处理中...";
+
             foreach (var line in lines)
             {
                 try {
-                    IPAddress[] ips = await Dns.GetHostAddressesAsync(line.Trim());
+                    string target = line.Trim();
+                    if (string.IsNullOrEmpty(target)) continue;
+
+                    IPAddress[] ips = await Dns.GetHostAddressesAsync(target);
                     foreach (var ip in ips) {
-                        string cmd = "", args = "";
                         if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) {
-                            cmd = "route";
-                            args = $"{action} {ip} mask 255.255.255.255 {gw} metric 1";
-                        } else {
-                            cmd = "netsh";
+                            // IPv4 必须带网关
+                            RunCmd("route", $"{action} {ip} mask 255.255.255.255 {gw} metric 1");
+                        } else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6) {
+                            // IPv6 使用 netsh
                             string ns = action == "add" ? "add" : "delete";
-                            args = $"interface ipv6 {ns} route {ip}/128 interface=1";
+                            RunCmd("netsh", $"interface ipv6 {ns} route {ip}/128 interface=1");
                         }
-                        RunAsAdmin(cmd, args);
                     }
                 } catch { }
             }
-            MessageBox.Show("操作执行完毕！");
+
+            btnExecute.Enabled = true;
+            btnExecute.Text = "执行";
+            MessageBox.Show("路由操作已提交，请点击'查看路由表'确认。");
         }
 
-        private void RunAsAdmin(string cmd, string args)
+        private void RunCmd(string fileName, string args)
         {
-            ProcessStartInfo psi = new ProcessStartInfo(cmd, args) { Verb = "runas", CreateNoWindow = true, UseShellExecute = true };
+            ProcessStartInfo psi = new ProcessStartInfo(fileName, args)
+            {
+                Verb = "runas", // 弹出 UAC 提权
+                CreateNoWindow = true,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
             try { Process.Start(psi); } catch { }
         }
 
-        [STAThread] static void Main() { Application.EnableVisualStyles(); Application.Run(new MainForm()); }
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new MainForm());
+        }
     }
 }
