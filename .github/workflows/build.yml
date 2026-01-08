@@ -1,4 +1,4 @@
-name: Build-CSharp-Version
+name: Build-CSharp-Forwarder
 
 on: [push, workflow_dispatch]
 
@@ -6,18 +6,20 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 1. 拉取代码
+        uses: actions/checkout@v4
 
-      - name: Setup MSBuild
+      - name: 2. 配置 MSBuild (C# 编译器)
         uses: microsoft/setup-msbuild@v1
 
-      - name: Compile CSharp App
+      - name: 3. 执行编译
         run: |
-          # 使用 csc (C# 编译器) 直接将代码转为 EXE
-          csc /target:winexe /out:RouteForwarder_CS.exe main.cs
+          # /target:winexe 确保生成的是带界面的程序，没有黑窗口
+          # /reference:System.Windows.Forms.dll 引用界面库
+          csc /target:winexe /out:RouteForwarder_CSharp.exe /reference:System.Windows.Forms.dll,System.Drawing.dll main.cs
 
-      - name: Upload Artifact
+      - name: 4. 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: CSharp_Version
-          path: RouteForwarder_CS.exe
+          name: CSharp_Binary
+          path: RouteForwarder_CSharp.exe
