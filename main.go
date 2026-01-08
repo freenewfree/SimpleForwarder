@@ -3,38 +3,53 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
+	"github.com/lxn/win"
 )
+
+func init() {
+	// 强制管理员权限启动
+	if !strings.Contains(strings.Join(os.Args, ""), "-noderun") {
+		if !win.IsUserAnAdmin() {
+			verb := "runas"
+			exe, _ := os.Executable()
+			cwd, _ := os.Getwd()
+			args := append([]string{"-noderun"}, os.Args[1:]...)
+
+			verbPtr, _ := win.UTF16PtrFromString(verb)
+			exePtr, _ := win.UTF16PtrFromString(exe)
+			cwdPtr, _ := win.UTF16PtrFromString(cwd)
+			argPtr, _ := win.UTF16PtrFromString(strings.Join(args, " "))
+
+			win.ShellExecute(0, verbPtr, exePtr, argPtr, cwdPtr, win.SW_NORMAL)
+			os.Exit(0)
+		}
+	}
+}
 
 func main() {
 	var mw *walk.MainWindow
 	var outTE *walk.TextEdit
 	var remoteAddr *walk.LineEdit
-	var logLabel *walk.Label
 
 	if _, err := (MainWindow{
 		AssignTo: &mw,
-		Title:    "RouteForwarder 增强版 (支持IPv6/域名)",
-		MinSize:  Size{Width: 450, Height: 350},
+		Title:    "RouteForwarder 增强版",
+		MinSize:  Size{Width: 500, Height: 400},
 		Layout:   VBox{},
 		Children: []Widget{
+			Label{Text: "目标地址 (域名或 IP):"},
+			LineEdit{AssignTo: &remoteAddr, Text: "www.google.com"},
 			Composite{
-				Layout: Grid{Columns: 2},
-				Children: []Widget{
-					Label{Text: "目标地址 (域名或IP):"},
-					LineEdit{AssignTo: &remoteAddr, Text: "www.google.com"},
-					
-					Label{Text: "操作说明:"},
-					Label{AssignTo: &logLabel, Text: "输入地址后点击下方按钮执行"},
-				},
-			},
-			HSplitter{
+				Layout: HBox{MarginsZero: true},
 				Children: []Widget{
 					PushButton{
-						Text: "添加路由 (IPv4+IPv6)",
+						Text: "添加路由 (IPv4/IPv6)",
 						OnClicked: func() {
 							handleRoute(remoteAddr.Text(), "add", outTE)
 						},
@@ -50,24 +65,24 @@ func main() {
 			Label{Text: "运行日志:"},
 			TextEdit{AssignTo: &outTE, ReadOnly: true, VScroll: true},
 			PushButton{
-				Text: "查看系统路由表 (Print)",
+				Text: "查看系统路由表",
 				OnClicked: func() {
-					exec.Command("cmd", "/c", "start cmd /k route print").Run()
+					exec.Command("cmd", "/c", "start route print").Run()
 				},
 			},
 		},
 	}.Run()); err != nil {
-		// 这里修复了报错：直接弹出错误对话框
-		fmt.Println(err)
+		// 如果启动失败，弹出消息框告知原因
+		walk.MsgBox(nil, "错误", "程序启动失败: "+err.Error(), walk.MsgBoxIconError)
 	}
 }
 
 func handleRoute(input, action string, log *walk.TextEdit) {
-	log.AppendText(fmt.Sprintf("--- 正在%s路由: %s ---\r\n", action, input))
+	log.AppendText(fmt.Sprintf("[%s] 正在处理: %s\r\n", action, input))
 	
 	ips, err := net.LookupIP(input)
 	if err != nil {
-		log.AppendText(fmt.Sprintf("解析失败: %v\r\n", err))
+		log.AppendText(fmt.Sprintf("错误: 无法解析地址 %v\r\n", err))
 		return
 	}
 
@@ -76,16 +91,6 @@ func handleRoute(input, action string, log *walk.TextEdit) {
 		if ip.To4() != nil {
 			cmd = exec.Command("route", action, ip.String(), "mask", "255.255.255.255")
 		} else {
+			// IPv6 增加处理
 			if action == "add" {
-				// 注意：这里尝试使用通用的 IPv6 添加方式
-				cmd = exec.Command("netsh", "interface", "ipv6", "add", "route", ip.String()+"/128", "interface=1")
-			} else {
-				cmd = exec.Command("netsh", "interface", "ipv6", "delete", "route", ip.String()+"/128", "interface=1")
-			}
-		}
-
-		output, _ := cmd.CombinedOutput()
-		log.AppendText(fmt.Sprintf("IP: %s -> %s\r\n", ip.String(), string(output)))
-	}
-	log.AppendText("执行完毕。\r\n\r\n")
-}
+				cmd
