@@ -1,4 +1,4 @@
-name: Build-GUI-Pro
+name: Build-Final-Success
 
 on: [push, workflow_dispatch]
 
@@ -10,22 +10,21 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+          cache: false
 
-      - name: 准备依赖和生成清单
+      - name: 彻底解决依赖
         run: |
-          go mod init routepro
+          if (!(Test-Path go.mod)) { go mod init routeforwarder }
           go get github.com/lxn/walk
-          go get github.com/lxn/win
-          # 这一行非常关键：生成让界面显示的清单文件
           go mod tidy
 
-      - name: 编译 EXE
+      - name: 编译 (带界面支持)
         run: |
-          # 使用特定的 ldflags 确保它是 windowsgui 类型
-          go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Pro.exe main.go
+          # -H windowsgui 确保没有黑窗口，直接出图形界面
+          go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Final.exe main.go
 
-      - name: 上传
+      - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: Pro_Version
-          path: RouteForwarder_Pro.exe
+          name: RouteForwarder_Final
+          path: RouteForwarder_Final.exe
