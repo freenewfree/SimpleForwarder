@@ -84,7 +84,7 @@ namespace RouteForwarderPro
         {
             ProcessStartInfo psi = new ProcessStartInfo(cmd, args)
             {
-                Verb = "runas", // 核心：强制弹出管理员权限对话框
+                Verb = "runas",
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
                 UseShellExecute = true
