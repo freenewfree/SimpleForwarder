@@ -1,6 +1,13 @@
 name: Build-Bulianglin-Style
 
-on: [push, workflow_dispatch]
+on:
+  workflow_dispatch: # 开启手动触发按钮
+  push:
+    paths:
+      - '**.cs'     # 只有代码变动才编译
+      - '**.csproj' # 只有配置变动才编译
+    branches:
+      - main        # 只在主分支变动时触发
 
 jobs:
   build:
@@ -12,13 +19,12 @@ jobs:
         with:
           dotnet-version: '8.x'
 
-      - name: Publish
+      - name: Publish Single EXE
         run: |
-          dotnet publish -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true
+          dotnet publish -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: RouteForwarder_Final
-          # 注意：这里的路径现在指向 AssemblyName 设定的名称
           path: bin/Release/net8.0-windows/win-x64/publish/RouteForwarder.exe
