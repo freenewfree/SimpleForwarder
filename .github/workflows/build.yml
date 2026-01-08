@@ -6,28 +6,31 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: 1. 拉取代码
         uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: 2. 安装 Go 环境
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
           cache: false
 
-      - name: Initialize and Get Dependencies
+      - name: 3. 初始化并下载依赖
         run: |
-          go mod init forwarder
+          if (!(Test-Path go.mod)) { go mod init forwarder }
           go get github.com/lxn/walk
           go get github.com/lxn/win
           go mod tidy
 
-      - name: Build EXE
+      - name: 4. 编译 (强制 Windows 模式)
+        env:
+          GOOS: windows
+          GOARCH: amd64
         run: |
-          # 使用 -ldflags 优化：隐藏控制台并强制打包依赖
+          # 编译命令：-s -w 压缩体积，-H windowsgui 隐藏黑窗口
           go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Pro.exe main.go
 
-      - name: Upload Artifact
+      - name: 5. 上传成品
         uses: actions/upload-artifact@v4
         with:
           name: Forwarder_EXE
