@@ -1,33 +1,35 @@
-name: Build-My-Exe
+name: Build-RouteForwarder-GUI
 
-# 触发条件：当你点击“上传”或者手动点按钮时触发
-on: 
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
-    runs-on: windows-latest  # 在微软提供的云端 Windows 环境下编译
+    runs-on: windows-latest
     steps:
-      - name: 步骤1-拉取你的代码
+      - name: 1. 拉取代码
         uses: actions/checkout@v4
 
-      - name: 步骤2-安装Go环境
+      - name: 2. 安装 Go 环境
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+          cache: false  # 关闭缓存，防止干扰
 
-      - name: 步骤3-准备依赖并编译
+      - name: 3. 初始化环境并下载依赖
+        # 这里是修复的关键：强制生成 go.mod 并拉取 walk 库
         run: |
           go mod init simpleforwarder
           go get github.com/lxn/walk
           go get github.com/lxn/win
-          # 编译命令：-H windowsgui 让程序运行时不弹黑窗口
-          go build -ldflags="-s -w -H windowsgui" -o MyForwarder.exe main.go
+          go mod tidy
 
-      - name: 步骤4-把生成的exe保存到网页上
+      - name: 4. 编译生成 EXE
+        run: |
+          # -ldflags 说明：-H windowsgui 隐藏黑窗口，-s -w 压缩体积
+          go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Plus.exe main.go
+
+      - name: 5. 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: My-Windows-Program  # 下载包的名字
-          path: MyForwarder.exe      # 要保存的文件
+          name: Windows-EXE-Package
+          path: RouteForwarder_Plus.exe
