@@ -1,4 +1,4 @@
-name: Build-Final-Success
+name: Build-CSharp-Version
 
 on: [push, workflow_dispatch]
 
@@ -7,24 +7,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-          cache: false
 
-      - name: 彻底解决依赖
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1
+
+      - name: Compile CSharp App
         run: |
-          if (!(Test-Path go.mod)) { go mod init routeforwarder }
-          go get github.com/lxn/walk
-          go mod tidy
+          # 使用 csc (C# 编译器) 直接将代码转为 EXE
+          csc /target:winexe /out:RouteForwarder_CS.exe main.cs
 
-      - name: 编译 (带界面支持)
-        run: |
-          # -H windowsgui 确保没有黑窗口，直接出图形界面
-          go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Final.exe main.go
-
-      - name: 上传成品
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RouteForwarder_Final
-          path: RouteForwarder_Final.exe
+          name: CSharp_Version
+          path: RouteForwarder_CS.exe
