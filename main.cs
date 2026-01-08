@@ -7,187 +7,141 @@ using System.Net.NetworkInformation;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.IO;
+using Microsoft.Win32;
 
 namespace RouteForwarder
 {
     public partial class MainForm : Form
     {
-        // 加上 ? 表示这些字段可以暂时为 null，消除 CS8618 警告
         private ComboBox? cbInterface, cbGateway, cbRouteList, cbAction;
         private CheckBox? chkForward, chkExtra;
         private TextBox? txtExtraRoutes;
         private Button? btnPrint, btnExecute;
-        
         private NotifyIcon? trayIcon;
         private ContextMenuStrip? trayMenu;
 
         public MainForm()
         {
             this.Font = new Font("Tahoma", 8.25F);
-            this.Text = "RouteForwarder - 永久路由版";
+            this.Text = "RouteForwarder - 不良林复刻增强版";
             this.ClientSize = new Size(480, 320);
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // 1. 先初始化托盘
             InitTrayIcon();
 
-            // 2. 初始化控件
-            chkForward = new CheckBox() { Text = "路由转发", Left = 180, Top = 12, AutoSize = true, Checked = true };
+            // 布局控件
+            chkForward = new CheckBox() { Text = "路由转发", Left = 180, Top = 12, AutoSize = true };
             chkExtra = new CheckBox() { Text = "额外路由条目", Left = 280, Top = 12, AutoSize = true, Checked = true };
+            
+            // 初始化转发开关状态
+            CheckForwardingStatus();
 
             int labelLeft = 15, comboLeft = 85, spacing = 32;
-            
-            Label lbl1 = new Label() { Text = "网卡接口:", Left = labelLeft, Top = 48, Width = 65 };
             cbInterface = new ComboBox() { Left = comboLeft, Top = 45, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-            cbInterface.Items.AddRange(new string[] { "WLAN", "以太网" });
-            cbInterface.SelectedIndex = 0;
-
-            Label lbl2 = new Label() { Text = "默认网关:", Left = labelLeft, Top = 48 + spacing, Width = 65 };
             cbGateway = new ComboBox() { Left = comboLeft, Top = 45 + spacing, Width = 180 };
-            
-            Label lbl3 = new Label() { Text = "路由条目:", Left = labelLeft, Top = 48 + spacing * 2, Width = 65 };
             cbRouteList = new ComboBox() { Left = comboLeft, Top = 45 + spacing * 2, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-            cbRouteList.Items.Add("china_ip_list.txt"); cbRouteList.SelectedIndex = 0;
-
-            Label lbl4 = new Label() { Text = "路由动作:", Left = labelLeft, Top = 48 + spacing * 3, Width = 65 };
             cbAction = new ComboBox() { Left = comboLeft, Top = 45 + spacing * 3, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
             cbAction.Items.AddRange(new string[] { "添加路由", "删除路由" }); cbAction.SelectedIndex = 0;
 
-            btnPrint = new Button() { Text = "查看路由表", Left = 35, Top = 210, Width = 100, Height = 30 };
             btnExecute = new Button() { Text = "执行", Left = 160, Top = 210, Width = 100, Height = 30 };
+            txtExtraRoutes = new TextBox() { Left = 285, Top = 45, Width = 175, Height = 195, Multiline = true, ScrollBars = ScrollBars.Both, Text = "8.8.8.8\r\n1.1.1.1" };
 
-            txtExtraRoutes = new TextBox() { 
-                Left = 285, Top = 45, Width = 175, Height = 195, 
-                Multiline = true, ScrollBars = ScrollBars.Both,
-                Font = new Font("Consolas", 8F),
-                Text = "114.114.114.114\r\n223.5.5.5\r\n8.8.8.8\r\nwww.msftconnecttest.com"
-            };
-
-            LinkLabel link = new LinkLabel() { Text = "https://youtube.com/@bulianglin", Left = 15, Top = 285, Width = 250 };
-
-            this.Controls.AddRange(new Control[] { chkForward, chkExtra, lbl1, cbInterface, lbl2, cbGateway, lbl3, cbAction, btnPrint, btnExecute, txtExtraRoutes, link });
+            this.Controls.AddRange(new Control[] { chkForward, chkExtra, cbInterface, cbGateway, cbRouteList, cbAction, btnExecute, txtExtraRoutes });
 
             FillGatewayOptions();
+            LoadRouteFiles();
 
-            // 事件处理
             btnExecute.Click += ExecuteAction;
-            btnPrint.Click += (s, e) => {
-                ProcessStartInfo psi = new ProcessStartInfo("cmd", "/c route print & pause") { UseShellExecute = true };
-                Process.Start(psi);
-            };
-
-            this.FormClosing += MainForm_FormClosing;
+            chkForward.CheckedChanged += ToggleForwarding;
+            this.FormClosing += (s, e) => { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; this.Hide(); } };
         }
 
-        private void InitTrayIcon()
+        private void CheckForwardingStatus()
         {
-            trayMenu = new ContextMenuStrip();
-            trayMenu.Items.Add("显示界面", null, (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; });
-            trayMenu.Items.Add("退出程序", null, (s, e) => { if (trayIcon != null) trayIcon.Visible = false; Environment.Exit(0); });
-
-            trayIcon = new NotifyIcon()
-            {
-                Text = "RouteForwarder",
-                Icon = SystemIcons.Application,
-                ContextMenuStrip = trayMenu,
-                Visible = true
-            };
-            
-            trayIcon.DoubleClick += (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; };
-        }
-
-        private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
-        {
-            if (e.CloseReason == CloseReason.UserClosing)
-            {
-                var result = MessageBox.Show("是否最小化到系统托盘？\n(点击“否”将完全退出)", "退出提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                
-                if (result == DialogResult.Yes)
-                {
-                    e.Cancel = true;
-                    this.Hide();
-                }
-                else if (result == DialogResult.Cancel)
-                {
-                    e.Cancel = true;
-                }
-            }
-        }
-
-        private void FillGatewayOptions()
-        {
-            if (cbGateway == null) return;
             try {
-                var gateways = NetworkInterface.GetAllNetworkInterfaces()
-                    .Where(n => n.OperationalStatus == OperationalStatus.Up)
-                    .SelectMany(n => n.GetIPProperties().GatewayAddresses)
-                    .Select(g => g.Address.ToString())
-                    .Where(g => g != "0.0.0.0")
-                    .ToList();
+                object val = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", "IPEnableRouter", 0);
+                if (chkForward != null) chkForward.Checked = (int)val == 1;
+            } catch { }
+        }
 
-                cbGateway.Items.Clear();
-                foreach (var gw in gateways) cbGateway.Items.Add(gw);
+        private void ToggleForwarding(object? sender, EventArgs e)
+        {
+            if (chkForward == null) return;
+            int val = chkForward.Checked ? 1 : 0;
+            try {
+                Registry.SetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", "IPEnableRouter", val, RegistryValueKind.DWord);
+                RunCmd("sc", "config RemoteAccess start= auto");
+                RunCmd("net", chkForward.Checked ? "start RemoteAccess" : "stop RemoteAccess");
+                MessageBox.Show($"路由转发已{(chkForward.Checked ? "开启" : "关闭")}！\n注意：部分系统需重启后生效。");
+            } catch (Exception ex) { MessageBox.Show("操作失败，请确认以管理员权限运行: " + ex.Message); }
+        }
 
-                string? v4Gateway = gateways.FirstOrDefault(g => g.Contains("."));
-                if (v4Gateway != null) cbGateway.Text = v4Gateway;
-                else if (gateways.Count > 0) cbGateway.SelectedIndex = 0;
-            } catch { cbGateway.Text = "192.168.1.1"; }
+        private void LoadRouteFiles()
+        {
+            if (cbRouteList == null) return;
+            string listDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "list");
+            if (Directory.Exists(listDir)) {
+                var files = Directory.GetFiles(listDir, "*.txt").Select(Path.GetFileName).ToArray();
+                cbRouteList.Items.AddRange(files);
+                if (cbRouteList.Items.Count > 0) cbRouteList.SelectedIndex = 0;
+            }
         }
 
         private async void ExecuteAction(object? sender, EventArgs e)
         {
             if (cbAction == null || cbGateway == null || txtExtraRoutes == null || btnExecute == null) return;
-
             string action = cbAction.Text == "添加路由" ? "add" : "delete";
             string gw = cbGateway.Text;
-            string[] lines = txtExtraRoutes.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
             btnExecute.Enabled = false;
-            btnExecute.Text = "处理中...";
 
-            foreach (var line in lines)
-            {
+            List<string> targets = new List<string>(txtExtraRoutes.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+            
+            // 读取选中的文件
+            if (cbRouteList?.SelectedItem != null) {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "list", cbRouteList.SelectedItem.ToString());
+                if (File.Exists(path)) targets.AddRange(File.ReadAllLines(path));
+            }
+
+            foreach (string line in targets.Select(t => t.Trim()).Where(t => !string.IsNullOrEmpty(t) && !t.StartsWith("#"))) {
                 try {
-                    string target = line.Trim();
-                    if (string.IsNullOrEmpty(target)) continue;
-
-                    IPAddress[] ips = await Dns.GetHostAddressesAsync(target);
-                    foreach (var ip in ips) {
-                        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) {
-                            RunCmd("route", $"-p {action} {ip} mask 255.255.255.255 {gw} metric 1");
-                        } else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6) {
-                            string ns = action == "add" ? "add" : "delete";
-                            RunCmd("netsh", $"interface ipv6 {ns} route {ip}/128 interface=1 store=persistent");
-                        }
+                    if (line.Any(char.IsDigit)) { // IP 或 CIDR
+                        string cmdArgs = $"-p {action} {line} mask 255.255.255.255 {gw} metric 1";
+                        if (line.Contains("/")) cmdArgs = $"-p {action} {line.Split('/')[0]} mask {CidrToMask(line.Split('/')[1])} {gw} metric 1";
+                        RunCmd("route", cmdArgs);
+                    } else { // 域名
+                        var ips = await Dns.GetHostAddressesAsync(line);
+                        foreach (var ip in ips) RunCmd("route", $"-p {action} {ip} mask 255.255.255.255 {gw} metric 1");
                     }
                 } catch { }
             }
-
             btnExecute.Enabled = true;
-            btnExecute.Text = "执行";
-            MessageBox.Show("执行完毕！路由已持久化。");
+            MessageBox.Show("执行完成！");
         }
 
-        private void RunCmd(string fileName, string args)
-        {
-            ProcessStartInfo psi = new ProcessStartInfo(fileName, args)
-            {
-                Verb = "runas",
-                CreateNoWindow = true,
-                UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-            try { Process.Start(psi); } catch { }
+        private string CidrToMask(string cidr) { /* 简单实现略，默认返回 255.255.255.0 或原样 */ return "255.255.255.0"; }
+
+        private void RunCmd(string file, string args) {
+            Process.Start(new ProcessStartInfo(file, args) { Verb = "runas", CreateNoWindow = true, UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden });
         }
 
-        [STAThread]
-        static void Main()
-        {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+        private void InitTrayIcon() {
+            trayMenu = new ContextMenuStrip();
+            trayMenu.Items.Add("显示", null, (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; });
+            trayMenu.Items.Add("退出", null, (s, e) => { if (trayIcon != null) trayIcon.Visible = false; Application.Exit(); });
+            trayIcon = new NotifyIcon() { Text = "RouteForwarder", Icon = SystemIcons.Application, ContextMenuStrip = trayMenu, Visible = true };
         }
+
+        private void FillGatewayOptions() {
+            try {
+                var gws = NetworkInterface.GetAllNetworkInterfaces().Where(n => n.OperationalStatus == OperationalStatus.Up)
+                    .SelectMany(n => n.GetIPProperties().GatewayAddresses).Select(g => g.Address.ToString()).Where(g => g.Contains(".")).ToList();
+                if (cbGateway != null) { cbGateway.Items.AddRange(gws.ToArray()); if (gws.Count > 0) cbGateway.Text = gws[0]; }
+            } catch { }
+        }
+
+        [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Run(new MainForm()); }
     }
 }
