@@ -4,105 +4,95 @@ using System.Net;
 using System.Net.Sockets;
 using System.Windows.Forms;
 using System.Diagnostics;
+using System.Linq;
+using System.Net.NetworkInformation;
 
 namespace RouteForwarderPro
 {
     public class MainForm : Form
     {
-        private TextBox txtRemoteAddr;
+        private TextBox txtRemoteAddr, txtGateway;
         private RichTextBox logBox;
         private Button btnAdd, btnDel, btnPrint;
 
         public MainForm()
         {
-            this.Text = "RouteForwarder 增强版 (C# 原生)";
-            this.Size = new Size(500, 450);
+            // --- 界面美化 (不良林深色风格) ---
+            this.Text = "RouteForwarder Pro (自动网关版)";
+            this.Size = new Size(520, 500);
+            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.ForeColor = Color.White;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
 
-            Label lbl = new Label() { Text = "目标域名/IP:", Left = 20, Top = 20, Width = 100 };
-            txtRemoteAddr = new TextBox() { Left = 120, Top = 20, Width = 320, Text = "www.google.com" };
+            Font mainFont = new Font("Segoe UI", 9, FontStyle.Regular);
             
-            btnAdd = new Button() { Text = "添加路由", Left = 120, Top = 60, Width = 100 };
-            btnDel = new Button() { Text = "删除路由", Left = 230, Top = 60, Width = 100 };
-            btnPrint = new Button() { Text = "查看路由表", Left = 340, Top = 60, Width = 100 };
+            Label lbl1 = new Label() { Text = "目标域名/IP:", Left = 20, Top = 20, Width = 100, Font = mainFont };
+            txtRemoteAddr = new TextBox() { Left = 120, Top = 18, Width = 350, Text = "www.google.com", BackColor = Color.FromArgb(50, 50, 50), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
 
-            logBox = new RichTextBox() { Left = 20, Top = 100, Width = 440, Height = 280, ReadOnly = true, BackColor = Color.Black, ForeColor = Color.Lime };
+            Label lbl2 = new Label() { Text = "本地网关:", Left = 20, Top = 55, Width = 100, Font = mainFont };
+            txtGateway = new TextBox() { Left = 120, Top = 53, Width = 350, Text = GetDefaultGateway(), BackColor = Color.FromArgb(50, 50, 50), ForeColor = Color.Yellow, BorderStyle = BorderStyle.FixedSingle };
+            
+            btnAdd = new Button() { Text = "添加路由", Left = 120, Top = 90, Width = 110, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(0, 120, 215) };
+            btnDel = new Button() { Text = "删除路由", Left = 240, Top = 90, Width = 110, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(200, 0, 0) };
+            btnPrint = new Button() { Text = "查看路由表", Left = 360, Top = 90, Width = 110, Height = 30, FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(60, 60, 60) };
 
-            this.Controls.Add(lbl);
-            this.Controls.Add(txtRemoteAddr);
-            this.Controls.Add(btnAdd);
-            this.Controls.Add(btnDel);
-            this.Controls.Add(btnPrint);
-            this.Controls.Add(logBox);
+            logBox = new RichTextBox() { Left = 20, Top = 140, Width = 460, Height = 300, ReadOnly = true, BackColor = Color.Black, ForeColor = Color.Lime, BorderStyle = BorderStyle.None, Font = new Font("Consolas", 9) };
+
+            this.Controls.AddRange(new Control[] { lbl1, txtRemoteAddr, lbl2, txtGateway, btnAdd, btnDel, btnPrint, logBox });
 
             btnAdd.Click += (s, e) => HandleRoute("add");
             btnDel.Click += (s, e) => HandleRoute("delete");
-            btnPrint.Click += (s, e) => {
-                ProcessStartInfo psi = new ProcessStartInfo("cmd", "/c route print & pause") { UseShellExecute = true };
-                Process.Start(psi);
-            };
+            btnPrint.Click += (s, e) => Process.Start("cmd", "/c route print & pause");
+        }
+
+        // 自动获取网关的魔法函数
+        private string GetDefaultGateway()
+        {
+            try {
+                return NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(n => n.OperationalStatus == OperationalStatus.Up)
+                    .SelectMany(n => n.GetIPProperties().GatewayAddresses)
+                    .Select(g => g.Address.ToString())
+                    .FirstOrDefault(g => g.Contains(".") && g != "0.0.0.0") ?? "192.168.1.1";
+            } catch { return "192.168.1.1"; }
         }
 
         private void HandleRoute(string action)
         {
             string input = txtRemoteAddr.Text.Trim();
-            if (string.IsNullOrEmpty(input)) return;
+            string gw = txtGateway.Text.Trim();
+            logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] 执行 {action}...\n");
 
-            logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] 准备 {action}: {input}\n");
-
-            try
-            {
-                IPAddress[] ips = Dns.GetHostAddresses(input);
-                foreach (var ip in ips)
-                {
-                    string cmd, args;
-                    if (ip.AddressFamily == AddressFamily.InterNetwork) // IPv4
-                    {
-                        cmd = "route";
-                        args = $"{action} {ip.ToString()} mask 255.255.255.255";
-                    }
-                    else if (ip.AddressFamily == AddressFamily.InterNetworkV6) // IPv6
-                    {
-                        cmd = "netsh";
-                        string netshAction = (action == "add") ? "add" : "delete";
-                        args = $"interface ipv6 {netshAction} route {ip.ToString()}/128 interface=1";
-                    }
-                    else continue;
-
-                    RunCmd(cmd, args, ip.ToString());
-                }
-            }
-            catch (Exception ex)
-            {
-                logBox.AppendText($"错误: {ex.Message}\n");
-            }
-        }
-
-        private void RunCmd(string cmd, string args, string ip)
-        {
-            ProcessStartInfo psi = new ProcessStartInfo(cmd, args)
-            {
-                Verb = "runas",
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                UseShellExecute = true
-            };
             try {
-                Process.Start(psi);
-                logBox.AppendText($"成功: {ip}\n");
-            } catch {
-                logBox.AppendText($"失败: 用户拒绝授权或权限不足 ({ip})\n");
+                IPAddress[] ips = Dns.GetHostAddresses(input);
+                foreach (var ip in ips) {
+                    string cmd, args;
+                    if (ip.AddressFamily == AddressFamily.InterNetwork) {
+                        cmd = "route";
+                        // 增加了网关参数，确保路由能成功添加
+                        args = $"{action} {ip} mask 255.255.255.255 {gw} metric 1";
+                    } else {
+                        cmd = "netsh";
+                        string nsAct = action == "add" ? "add" : "delete";
+                        args = $"interface ipv6 {nsAct} route {ip}/128 interface=1";
+                    }
+                    RunCmd(cmd, args);
+                }
+            } catch (Exception ex) { logBox.AppendText($"失败: {ex.Message}\n"); }
+        }
+
+        private void RunCmd(string cmd, string args)
+        {
+            ProcessStartInfo psi = new ProcessStartInfo(cmd, args) { Verb = "runas", CreateNoWindow = true, UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden };
+            try { 
+                Process.Start(psi); 
+                logBox.AppendText($"√ {cmd} {args}\n"); 
+            } catch { 
+                logBox.AppendText($"× 拒绝授权\n"); 
             }
         }
 
-        [STAThread]
-        static void Main()
-        {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
-        }
+        [STAThread] static void Main() { Application.EnableVisualStyles(); Application.Run(new MainForm()); }
     }
 }
