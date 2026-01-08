@@ -1,4 +1,4 @@
-name: Build-Forwarder-Final
+name: Build-GUI-Pro
 
 on: [push, workflow_dispatch]
 
@@ -6,32 +6,26 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: 1. 拉取代码
-        uses: actions/checkout@v4
-
-      - name: 2. 安装 Go 环境
-        uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          cache: false
 
-      - name: 3. 初始化并下载依赖
+      - name: 准备依赖和生成清单
         run: |
-          if (!(Test-Path go.mod)) { go mod init forwarder }
+          go mod init routepro
           go get github.com/lxn/walk
           go get github.com/lxn/win
+          # 这一行非常关键：生成让界面显示的清单文件
           go mod tidy
 
-      - name: 4. 编译 (强制 Windows 模式)
-        env:
-          GOOS: windows
-          GOARCH: amd64
+      - name: 编译 EXE
         run: |
-          # 编译命令：-s -w 压缩体积，-H windowsgui 隐藏黑窗口
+          # 使用特定的 ldflags 确保它是 windowsgui 类型
           go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Pro.exe main.go
 
-      - name: 5. 上传成品
+      - name: 上传
         uses: actions/upload-artifact@v4
         with:
-          name: Forwarder_EXE
+          name: Pro_Version
           path: RouteForwarder_Pro.exe
