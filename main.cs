@@ -13,15 +13,20 @@ namespace RouteForwarder
 {
     public partial class MainForm : Form
     {
-        private ComboBox cbInterface, cbGateway, cbRouteList, cbAction;
-        private CheckBox chkForward, chkExtra;
-        private TextBox txtExtraRoutes;
-        private Button btnExecute;
-        private NotifyIcon trayIcon;
+        // 显式初始化，避免 CS8618 警告
+        private ComboBox cbInterface = new ComboBox();
+        private ComboBox cbGateway = new ComboBox();
+        private ComboBox cbRouteList = new ComboBox();
+        private ComboBox cbAction = new ComboBox();
+        private CheckBox chkForward = new CheckBox();
+        private CheckBox chkExtra = new CheckBox();
+        private TextBox txtExtraRoutes = new TextBox();
+        private Button btnExecute = new Button();
+        private NotifyIcon trayIcon = new NotifyIcon();
 
         public MainForm()
         {
-            this.Font = new Font("Microsoft YaHei", 9F); // 换成雅黑，显示更工整
+            this.Font = new Font("Microsoft YaHei", 9F);
             this.Text = "RouteForwarder - 不良林复刻最终版";
             this.ClientSize = new Size(480, 320);
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -29,41 +34,42 @@ namespace RouteForwarder
             this.StartPosition = FormStartPosition.CenterScreen;
 
             // 1. 初始化托盘
-            trayIcon = new NotifyIcon() { Text = "RouteForwarder", Icon = SystemIcons.Application, Visible = true };
+            trayIcon.Text = "RouteForwarder";
+            trayIcon.Icon = SystemIcons.Application;
+            trayIcon.Visible = true;
             trayIcon.DoubleClick += (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; };
 
             // 2. 布局逻辑
             int labelLeft = 15, comboLeft = 85, spacing = 40;
 
-            chkForward = new CheckBox() { Text = "路由转发", Left = 120, Top = 12, AutoSize = true };
-            chkExtra = new CheckBox() { Text = "额外路由条目", Left = 220, Top = 12, AutoSize = true, Checked = true };
+            chkForward.Text = "路由转发"; chkForward.Left = 120; chkForward.Top = 12; chkForward.AutoSize = true;
+            chkExtra.Text = "额外路由条目"; chkExtra.Left = 220; chkExtra.Top = 12; chkExtra.AutoSize = true; chkExtra.Checked = true;
             
-            // 初始化检查转发状态
             CheckInitialForwarding();
 
             Label lbl1 = new Label() { Text = "网卡接口:", Left = labelLeft, Top = 53, Width = 65 };
-            cbInterface = new ComboBox() { Left = comboLeft, Top = 50, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
+            cbInterface.Left = comboLeft; cbInterface.Top = 50; cbInterface.Width = 180; cbInterface.DropDownStyle = ComboBoxStyle.DropDownList;
 
             Label lbl2 = new Label() { Text = "默认网关:", Left = labelLeft, Top = 53 + spacing, Width = 65 };
-            cbGateway = new ComboBox() { Left = comboLeft, Top = 50 + spacing, Width = 180 };
+            cbGateway.Left = comboLeft; cbGateway.Top = 50 + spacing; cbGateway.Width = 180;
 
             Label lbl3 = new Label() { Text = "路由条目:", Left = labelLeft, Top = 53 + spacing * 2, Width = 65 };
-            cbRouteList = new ComboBox() { Left = comboLeft, Top = 50 + spacing * 2, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
+            cbRouteList.Left = comboLeft; cbRouteList.Top = 50 + spacing * 2; cbRouteList.Width = 180; cbRouteList.DropDownStyle = ComboBoxStyle.DropDownList;
 
             Label lbl4 = new Label() { Text = "路由动作:", Left = labelLeft, Top = 53 + spacing * 3, Width = 65 };
-            cbAction = new ComboBox() { Left = comboLeft, Top = 50 + spacing * 3, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-            cbAction.Items.AddRange(new string[] { "添加路由", "删除路由" }); cbAction.SelectedIndex = 0;
+            cbAction.Left = comboLeft; cbAction.Top = 50 + spacing * 3; cbAction.Width = 180; cbAction.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbAction.Items.AddRange(new object[] { "添加路由", "删除路由" }); cbAction.SelectedIndex = 0;
 
-            btnExecute = new Button() { Text = "执行", Left = 120, Top = 230, Width = 100, Height = 35 };
-            txtExtraRoutes = new TextBox() { Left = 285, Top = 50, Width = 175, Height = 215, Multiline = true, ScrollBars = ScrollBars.Both, Text = "8.8.8.8\r\n1.1.1.1" };
+            btnExecute.Text = "执行"; btnExecute.Left = 120; btnExecute.Top = 230; btnExecute.Width = 100; btnExecute.Height = 35;
+            txtExtraRoutes.Left = 285; txtExtraRoutes.Top = 50; txtExtraRoutes.Width = 175; txtExtraRoutes.Height = 215; 
+            txtExtraRoutes.Multiline = true; txtExtraRoutes.ScrollBars = ScrollBars.Both; txtExtraRoutes.Text = "8.8.8.8\r\n1.1.1.1";
 
             this.Controls.AddRange(new Control[] { chkForward, chkExtra, lbl1, cbInterface, lbl2, cbGateway, lbl3, cbRouteList, lbl4, cbAction, btnExecute, txtExtraRoutes });
 
-            // 3. 填充动态数据
             RefreshNetworkInfo();
             LoadRouteFiles();
 
-            // 4. 绑定事件
+            // 绑定事件
             btnExecute.Click += ExecuteAction;
             chkForward.CheckedChanged += (s, e) => ToggleForwarding(chkForward.Checked);
             this.FormClosing += (s, e) => { if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; this.Hide(); } };
@@ -72,8 +78,9 @@ namespace RouteForwarder
         private void CheckInitialForwarding()
         {
             try {
-                object val = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", "IPEnableRouter", 0);
-                chkForward.Checked = (int)val == 1;
+                // 使用默认值 0 处理空值，解决 CS8600/CS8605
+                object? val = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", "IPEnableRouter", 0);
+                chkForward.Checked = (val is int i) ? i == 1 : false;
             } catch { }
         }
 
@@ -100,23 +107,35 @@ namespace RouteForwarder
         {
             string listDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "list");
             if (!Directory.Exists(listDir)) Directory.CreateDirectory(listDir);
-            var files = Directory.GetFiles(listDir, "*.txt").Select(Path.GetFileName).ToArray();
-            cbRouteList.Items.AddRange(files);
-            if (cbRouteList.Items.Count > 0) cbRouteList.SelectedIndex = 0;
-            else cbRouteList.Items.Add("无可用文件");
+            
+            // 显式转换为 object[] 解决 CS8620
+            var files = Directory.GetFiles(listDir, "*.txt")
+                        .Select(Path.GetFileName)
+                        .Where(f => f != null)
+                        .Cast<object>()
+                        .ToArray();
+
+            if (files.Length > 0) {
+                cbRouteList.Items.AddRange(files);
+                cbRouteList.SelectedIndex = 0;
+            } else {
+                cbRouteList.Items.Add("无可用文件");
+                cbRouteList.SelectedIndex = 0;
+            }
         }
 
         private void ToggleForwarding(bool enable)
         {
             try {
                 Registry.SetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", "IPEnableRouter", enable ? 1 : 0, RegistryValueKind.DWord);
-                RunCmd("sc", $"config RemoteAccess start= auto");
+                RunCmd("sc", "config RemoteAccess start= auto");
                 RunCmd("net", enable ? "start RemoteAccess" : "stop RemoteAccess");
-                MessageBox.Show("指令已发送，如未生效请确保以管理员权限运行并重启。");
+                MessageBox.Show("指令已发送，如未生效请重启电脑。");
             } catch (Exception ex) { MessageBox.Show("设置失败: " + ex.Message); }
         }
 
-        private async void ExecuteAction(object sender, EventArgs e)
+        // 修改 sender 为 object? 解决 CS8621
+        private async void ExecuteAction(object? sender, EventArgs e)
         {
             string action = cbAction.Text == "添加路由" ? "add" : "delete";
             string gw = cbGateway.Text;
@@ -125,7 +144,8 @@ namespace RouteForwarder
             List<string> targets = new List<string>(txtExtraRoutes.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
             
             if (cbRouteList.SelectedItem != null && cbRouteList.Text != "无可用文件") {
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "list", cbRouteList.Text);
+                string fileName = cbRouteList.Text;
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "list", fileName);
                 if (File.Exists(path)) targets.AddRange(File.ReadAllLines(path));
             }
 
