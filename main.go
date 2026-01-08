@@ -13,7 +13,6 @@ import (
 )
 
 func init() {
-	// 强制管理员权限启动
 	if !strings.Contains(strings.Join(os.Args, ""), "-noderun") {
 		if !win.IsUserAnAdmin() {
 			verb := "runas"
@@ -72,7 +71,6 @@ func main() {
 			},
 		},
 	}.Run()); err != nil {
-		// 如果启动失败，弹出消息框告知原因
 		walk.MsgBox(nil, "错误", "程序启动失败: "+err.Error(), walk.MsgBoxIconError)
 	}
 }
@@ -91,6 +89,15 @@ func handleRoute(input, action string, log *walk.TextEdit) {
 		if ip.To4() != nil {
 			cmd = exec.Command("route", action, ip.String(), "mask", "255.255.255.255")
 		} else {
-			// IPv6 增加处理
 			if action == "add" {
-				cmd
+				cmd = exec.Command("netsh", "interface", "ipv6", "add", "route", ip.String()+"/128", "interface=1")
+			} else {
+				cmd = exec.Command("netsh", "interface", "ipv6", "delete", "route", ip.String()+"/128", "interface=1")
+			}
+		}
+
+		output, _ := cmd.CombinedOutput()
+		log.AppendText(fmt.Sprintf("IP: %s -> %s\r\n", ip.String(), string(output)))
+	}
+	log.AppendText("--- 执行完毕 ---\r\n\r\n")
+}
