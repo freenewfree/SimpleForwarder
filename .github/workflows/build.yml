@@ -1,4 +1,4 @@
-name: Build-CSharp-Pro
+name: Build-Bulianglin-Style
 
 on: [push, workflow_dispatch]
 
@@ -12,13 +12,13 @@ jobs:
         with:
           dotnet-version: '8.x'
 
-      - name: Publish Single EXE
+      - name: Publish
         run: |
-          # 使用 publish 命令生成单个 EXE 文件
           dotnet publish -c Release -r win-x64 --self-contained false /p:PublishSingleFile=true
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: RouteForwarder_Pro
-          path: bin/Release/net8.0-windows/win-x64/publish/RouteForwarderPro.exe
+          name: RouteForwarder_Final
+          # 注意：这里的路径现在指向 AssemblyName 设定的名称
+          path: bin/Release/net8.0-windows/win-x64/publish/RouteForwarder.exe
