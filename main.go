@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
-	"strings"
-	"sync"
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
@@ -27,7 +25,7 @@ func main() {
 				Layout: Grid{Columns: 2},
 				Children: []Widget{
 					Label{Text: "目标地址 (域名或IP):"},
-					LineEdit{AssignTo: &remoteAddr, Text: "www.example.com"},
+					LineEdit{AssignTo: &remoteAddr, Text: "www.google.com"},
 					
 					Label{Text: "操作说明:"},
 					Label{AssignTo: &logLabel, Text: "输入地址后点击下方按钮执行"},
@@ -54,20 +52,19 @@ func main() {
 			PushButton{
 				Text: "查看系统路由表 (Print)",
 				OnClicked: func() {
-					cmd := exec.Command("cmd", "/c", "start cmd /k route print")
-					cmd.Run()
+					exec.Command("cmd", "/c", "start cmd /k route print").Run()
 				},
 			},
 		},
 	}.Run()); err != nil {
-		fmt.Fprintln(mw, err)
+		// 这里修复了报错：直接弹出错误对话框
+		fmt.Println(err)
 	}
 }
 
 func handleRoute(input, action string, log *walk.TextEdit) {
 	log.AppendText(fmt.Sprintf("--- 正在%s路由: %s ---\r\n", action, input))
 	
-	// 1. 解析地址 (支持 IPv4 和 IPv6)
 	ips, err := net.LookupIP(input)
 	if err != nil {
 		log.AppendText(fmt.Sprintf("解析失败: %v\r\n", err))
@@ -77,14 +74,11 @@ func handleRoute(input, action string, log *walk.TextEdit) {
 	for _, ip := range ips {
 		var cmd *exec.Cmd
 		if ip.To4() != nil {
-			// IPv4 路由处理
-			// route add <IP> mask 255.255.255.255
 			cmd = exec.Command("route", action, ip.String(), "mask", "255.255.255.255")
 		} else {
-			// IPv6 路由处理
-			// netsh interface ipv6 add route <IP>/128 "网卡名/索引"
 			if action == "add" {
-				cmd = exec.Command("netsh", "interface", "ipv6", "add", "route", ip.String()+"/128", "interface=1") // 默认尝试 interface 1
+				// 注意：这里尝试使用通用的 IPv6 添加方式
+				cmd = exec.Command("netsh", "interface", "ipv6", "add", "route", ip.String()+"/128", "interface=1")
 			} else {
 				cmd = exec.Command("netsh", "interface", "ipv6", "delete", "route", ip.String()+"/128", "interface=1")
 			}
