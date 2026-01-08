@@ -1,0 +1,33 @@
+name: Build-My-Exe
+
+# 触发条件：当你点击“上传”或者手动点按钮时触发
+on: 
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest  # 在微软提供的云端 Windows 环境下编译
+    steps:
+      - name: 步骤1-拉取你的代码
+        uses: actions/checkout@v4
+
+      - name: 步骤2-安装Go环境
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: 步骤3-准备依赖并编译
+        run: |
+          go mod init simpleforwarder
+          go get github.com/lxn/walk
+          go get github.com/lxn/win
+          # 编译命令：-H windowsgui 让程序运行时不弹黑窗口
+          go build -ldflags="-s -w -H windowsgui" -o MyForwarder.exe main.go
+
+      - name: 步骤4-把生成的exe保存到网页上
+        uses: actions/upload-artifact@v4
+        with:
+          name: My-Windows-Program  # 下载包的名字
+          path: MyForwarder.exe      # 要保存的文件
