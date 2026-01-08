@@ -19,7 +19,7 @@ namespace RouteForwarder
 
         public MainForm()
         {
-            // --- 界面初始化 ---
+            // --- 界面初始化 (复刻版布局) ---
             this.Font = new Font("Tahoma", 8.25F);
             this.Text = "RouteForwarder - 路由转发工具";
             this.ClientSize = new Size(480, 320);
@@ -36,8 +36,7 @@ namespace RouteForwarder
             
             Label lbl1 = new Label() { Text = "网卡接口:", Left = labelLeft, Top = 48, Width = 65 };
             cbInterface = new ComboBox() { Left = comboLeft, Top = 45, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
-            cbInterface.Items.Add("WLAN"); 
-            cbInterface.Items.Add("以太网");
+            cbInterface.Items.AddRange(new string[] { "WLAN", "以太网" });
             cbInterface.SelectedIndex = 0;
 
             Label lbl2 = new Label() { Text = "默认网关:", Left = labelLeft, Top = 48 + spacing, Width = 65 };
@@ -67,12 +66,15 @@ namespace RouteForwarder
 
             this.Controls.AddRange(new Control[] { chkForward, chkExtra, lbl1, cbInterface, lbl2, cbGateway, lbl3, cbRouteList, lbl4, cbAction, btnPrint, btnExecute, txtExtraRoutes, link });
 
-            // 填充网关数据
+            // 填充网关
             FillGatewayOptions();
 
             // 事件绑定
             btnExecute.Click += ExecuteAction;
-            btnPrint.Click += (s, e) => Process.Start("cmd", "/c route print & pause");
+            btnPrint.Click += (s, e) => {
+                ProcessStartInfo psi = new ProcessStartInfo("cmd", "/c route print & pause") { UseShellExecute = true };
+                Process.Start(psi);
+            };
         }
 
         private void FillGatewayOptions()
@@ -88,14 +90,17 @@ namespace RouteForwarder
                 cbGateway.Items.Clear();
                 foreach (var gw in gateways) cbGateway.Items.Add(gw);
 
-                // 优先选择 IPv4 网关（包含点的地址）
-                string v4Gateway = gateways.FirstOrDefault(g => g.Contains("."));
-                if (v4Gateway != null) cbGateway.Text = v4Gateway;
-                else if (gateways.Count > 0) cbGateway.SelectedIndex = 0;
+                // 优先填充 IPv4 地址 (带点的)，解决 Nullable 警告
+                string? v4Gateway = gateways.FirstOrDefault(g => g.Contains("."));
+                if (v4Gateway != null) {
+                    cbGateway.Text = v4Gateway;
+                } else if (gateways.Count > 0) {
+                    cbGateway.SelectedIndex = 0;
+                }
             } catch { cbGateway.Text = "192.168.1.1"; }
         }
 
-        private async void ExecuteAction(object sender, EventArgs e)
+        private async void ExecuteAction(object? sender, EventArgs e)
         {
             string action = cbAction.Text == "添加路由" ? "add" : "delete";
             string gw = cbGateway.Text;
@@ -113,10 +118,10 @@ namespace RouteForwarder
                     IPAddress[] ips = await Dns.GetHostAddressesAsync(target);
                     foreach (var ip in ips) {
                         if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) {
-                            // IPv4 必须带网关
+                            // IPv4
                             RunCmd("route", $"{action} {ip} mask 255.255.255.255 {gw} metric 1");
                         } else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6) {
-                            // IPv6 使用 netsh
+                            // IPv6
                             string ns = action == "add" ? "add" : "delete";
                             RunCmd("netsh", $"interface ipv6 {ns} route {ip}/128 interface=1");
                         }
@@ -126,14 +131,14 @@ namespace RouteForwarder
 
             btnExecute.Enabled = true;
             btnExecute.Text = "执行";
-            MessageBox.Show("路由操作已提交，请点击'查看路由表'确认。");
+            MessageBox.Show("执行完毕！请查看路由表确认结果。");
         }
 
         private void RunCmd(string fileName, string args)
         {
             ProcessStartInfo psi = new ProcessStartInfo(fileName, args)
             {
-                Verb = "runas", // 弹出 UAC 提权
+                Verb = "runas",
                 CreateNoWindow = true,
                 UseShellExecute = true,
                 WindowStyle = ProcessWindowStyle.Hidden
