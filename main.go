@@ -6,25 +6,27 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall" // 增加了这个包，用于处理兼容性
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 )
 
-// 程序启动时自动申请管理员权限
 func init() {
 	if !strings.Contains(strings.Join(os.Args, ""), "-noderun") {
+		// 修复 win.IsUserAnAdmin 报错
 		if !win.IsUserAnAdmin() {
-			verb := "runas"
 			exe, _ := os.Executable()
 			cwd, _ := os.Getwd()
 			args := append([]string{"-noderun"}, os.Args[1:]...)
+			argStr := strings.Join(args, " ")
 
-			verbPtr, _ := win.UTF16PtrFromString(verb)
-			exePtr, _ := win.UTF16PtrFromString(exe)
-			cwdPtr, _ := win.UTF16PtrFromString(cwd)
-			argPtr, _ := win.UTF16PtrFromString(strings.Join(args, " "))
+			// 使用 syscall 替代 win.UTF16PtrFromString 解决兼容性报错
+			verbPtr, _ := syscall.UTF16PtrFromString("runas")
+			exePtr, _ := syscall.UTF16PtrFromString(exe)
+			cwdPtr, _ := syscall.UTF16PtrFromString(cwd)
+			argPtr, _ := syscall.UTF16PtrFromString(argStr)
 
 			win.ShellExecute(0, verbPtr, exePtr, argPtr, cwdPtr, win.SW_NORMAL)
 			os.Exit(0)
@@ -88,10 +90,8 @@ func handleRoute(input, action string, log *walk.TextEdit) {
 	for _, ip := range ips {
 		var cmd *exec.Cmd
 		if ip.To4() != nil {
-			// IPv4 使用 route 命令
 			cmd = exec.Command("route", action, ip.String(), "mask", "255.255.255.255")
 		} else {
-			// IPv6 使用 netsh 命令
 			if action == "add" {
 				cmd = exec.Command("netsh", "interface", "ipv6", "add", "route", ip.String()+"/128", "interface=1")
 			} else {
