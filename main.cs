@@ -16,22 +16,28 @@ namespace RouteForwarder
         private CheckBox chkForward, chkExtra;
         private TextBox txtExtraRoutes;
         private Button btnPrint, btnExecute;
+        
+        // 托盘相关组件
+        private NotifyIcon trayIcon;
+        private ContextMenuStrip trayMenu;
 
         public MainForm()
         {
-            // --- 界面初始化 (复刻版布局) ---
+            // --- 界面初始化 ---
             this.Font = new Font("Tahoma", 8.25F);
-            this.Text = "RouteForwarder - 路由转发工具";
+            this.Text = "RouteForwarder - 永久路由版";
             this.ClientSize = new Size(480, 320);
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // 复选框
+            // 初始化托盘图标
+            InitTrayIcon();
+
+            // 控件布局 (保持之前的复刻样式)
             chkForward = new CheckBox() { Text = "路由转发", Left = 180, Top = 12, AutoSize = true, Checked = true };
             chkExtra = new CheckBox() { Text = "额外路由条目", Left = 280, Top = 12, AutoSize = true, Checked = true };
 
-            // 左侧参数区
             int labelLeft = 15, comboLeft = 85, spacing = 32;
             
             Label lbl1 = new Label() { Text = "网卡接口:", Left = labelLeft, Top = 48, Width = 65 };
@@ -50,11 +56,9 @@ namespace RouteForwarder
             cbAction = new ComboBox() { Left = comboLeft, Top = 45 + spacing * 3, Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
             cbAction.Items.AddRange(new string[] { "添加路由", "删除路由" }); cbAction.SelectedIndex = 0;
 
-            // 按钮
             btnPrint = new Button() { Text = "查看路由表", Left = 35, Top = 210, Width = 100, Height = 30 };
             btnExecute = new Button() { Text = "执行", Left = 160, Top = 210, Width = 100, Height = 30 };
 
-            // 右侧文本框
             txtExtraRoutes = new TextBox() { 
                 Left = 285, Top = 45, Width = 175, Height = 195, 
                 Multiline = true, ScrollBars = ScrollBars.Both,
@@ -64,17 +68,57 @@ namespace RouteForwarder
 
             LinkLabel link = new LinkLabel() { Text = "https://youtube.com/@bulianglin", Left = 15, Top = 285, Width = 250 };
 
-            this.Controls.AddRange(new Control[] { chkForward, chkExtra, lbl1, cbInterface, lbl2, cbGateway, lbl3, cbRouteList, lbl4, cbAction, btnPrint, btnExecute, txtExtraRoutes, link });
+            this.Controls.AddRange(new Control[] { chkForward, chkExtra, lbl1, cbInterface, lbl2, cbGateway, lbl3, cbAction, btnPrint, btnExecute, txtExtraRoutes, link });
 
-            // 填充网关
             FillGatewayOptions();
 
-            // 事件绑定
+            // 事件处理
             btnExecute.Click += ExecuteAction;
             btnPrint.Click += (s, e) => {
                 ProcessStartInfo psi = new ProcessStartInfo("cmd", "/c route print & pause") { UseShellExecute = true };
                 Process.Start(psi);
             };
+
+            // 关键：拦截关闭按钮事件
+            this.FormClosing += MainForm_FormClosing;
+        }
+
+        private void InitTrayIcon()
+        {
+            trayMenu = new ContextMenuStrip();
+            trayMenu.Items.Add("显示界面", null, (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; });
+            trayMenu.Items.Add("退出程序", null, (s, e) => { trayIcon.Visible = false; Environment.Exit(0); });
+
+            trayIcon = new NotifyIcon()
+            {
+                Text = "RouteForwarder",
+                Icon = SystemIcons.Application, // 使用系统默认图标，你也可以之后换成自定义 ico
+                ContextMenuStrip = trayMenu,
+                Visible = true
+            };
+            
+            // 双击托盘图标恢复窗口
+            trayIcon.DoubleClick += (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; };
+        }
+
+        private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            // 如果用户点击的是关闭按钮 (CloseReason.UserClosing)
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                var result = MessageBox.Show("是否最小化到系统托盘？\n(点击“否”将完全退出)", "退出提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                
+                if (result == DialogResult.Yes)
+                {
+                    e.Cancel = true; // 取消关闭事件
+                    this.Hide();     // 隐藏窗口
+                }
+                else if (result == DialogResult.Cancel)
+                {
+                    e.Cancel = true; // 什么也不做
+                }
+                // 如果点“否”，则不取消 e.Cancel，程序正常关闭
+            }
         }
 
         private void FillGatewayOptions()
@@ -90,13 +134,9 @@ namespace RouteForwarder
                 cbGateway.Items.Clear();
                 foreach (var gw in gateways) cbGateway.Items.Add(gw);
 
-                // 优先填充 IPv4 地址 (带点的)，解决 Nullable 警告
                 string? v4Gateway = gateways.FirstOrDefault(g => g.Contains("."));
-                if (v4Gateway != null) {
-                    cbGateway.Text = v4Gateway;
-                } else if (gateways.Count > 0) {
-                    cbGateway.SelectedIndex = 0;
-                }
+                if (v4Gateway != null) cbGateway.Text = v4Gateway;
+                else if (gateways.Count > 0) cbGateway.SelectedIndex = 0;
             } catch { cbGateway.Text = "192.168.1.1"; }
         }
 
@@ -118,12 +158,10 @@ namespace RouteForwarder
                     IPAddress[] ips = await Dns.GetHostAddressesAsync(target);
                     foreach (var ip in ips) {
                         if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) {
-                            // IPv4
-                            RunCmd("route", $"{action} {ip} mask 255.255.255.255 {gw} metric 1");
+                            RunCmd("route", $"-p {action} {ip} mask 255.255.255.255 {gw} metric 1");
                         } else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6) {
-                            // IPv6
                             string ns = action == "add" ? "add" : "delete";
-                            RunCmd("netsh", $"interface ipv6 {ns} route {ip}/128 interface=1");
+                            RunCmd("netsh", $"interface ipv6 {ns} route {ip}/128 interface=1 store=persistent");
                         }
                     }
                 } catch { }
@@ -131,7 +169,7 @@ namespace RouteForwarder
 
             btnExecute.Enabled = true;
             btnExecute.Text = "执行";
-            MessageBox.Show("执行完毕！请查看路由表确认结果。");
+            MessageBox.Show("执行完毕！");
         }
 
         private void RunCmd(string fileName, string args)
