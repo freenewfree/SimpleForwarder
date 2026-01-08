@@ -1,35 +1,13 @@
-name: Build-RouteForwarder-GUI
-
-on: [push, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: windows-latest
-    steps:
-      - name: 1. 拉取代码
-        uses: actions/checkout@v4
-
-      - name: 2. 安装 Go 环境
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-          cache: false  # 关闭缓存，防止干扰
-
-      - name: 3. 初始化环境并下载依赖
-        # 这里是修复的关键：强制生成 go.mod 并拉取 walk 库
+- name: 准备依赖
         run: |
-          go mod init simpleforwarder
+          if (!(Test-Path go.mod)) { go mod init routeforwarder }
+          # 强制清理并下载所有缺失的库
+          go mod tidy
           go get github.com/lxn/walk
           go get github.com/lxn/win
+          # 再次整理，确保 win 库被激活
           go mod tidy
 
-      - name: 4. 编译生成 EXE
+      - name: 编译 (带管理员引导)
         run: |
-          # -ldflags 说明：-H windowsgui 隐藏黑窗口，-s -w 压缩体积
-          go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_Plus.exe main.go
-
-      - name: 5. 上传成品
-        uses: actions/upload-artifact@v4
-        with:
-          name: Windows-EXE-Package
-          path: RouteForwarder_Plus.exe
+          go build -ldflags="-s -w -H windowsgui" -o RouteForwarder_V2.exe main.go
