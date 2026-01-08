@@ -12,6 +12,7 @@ import (
 	"github.com/lxn/win"
 )
 
+// 程序启动时自动申请管理员权限
 func init() {
 	if !strings.Contains(strings.Join(os.Args, ""), "-noderun") {
 		if !win.IsUserAnAdmin() {
@@ -38,17 +39,17 @@ func main() {
 
 	if _, err := (MainWindow{
 		AssignTo: &mw,
-		Title:    "RouteForwarder 增强版",
+		Title:    "RouteForwarder 增强版 (IPv6 & Domain Support)",
 		MinSize:  Size{Width: 500, Height: 400},
 		Layout:   VBox{},
 		Children: []Widget{
-			Label{Text: "目标地址 (域名或 IP):"},
+			Label{Text: "目标地址 (输入域名如 google.com 或 IP):"},
 			LineEdit{AssignTo: &remoteAddr, Text: "www.google.com"},
 			Composite{
 				Layout: HBox{MarginsZero: true},
 				Children: []Widget{
 					PushButton{
-						Text: "添加路由 (IPv4/IPv6)",
+						Text: "添加路由",
 						OnClicked: func() {
 							handleRoute(remoteAddr.Text(), "add", outTE)
 						},
@@ -61,17 +62,17 @@ func main() {
 					},
 				},
 			},
-			Label{Text: "运行日志:"},
+			Label{Text: "操作日志:"},
 			TextEdit{AssignTo: &outTE, ReadOnly: true, VScroll: true},
 			PushButton{
-				Text: "查看系统路由表",
+				Text: "查看系统路由表 (Print)",
 				OnClicked: func() {
 					exec.Command("cmd", "/c", "start route print").Run()
 				},
 			},
 		},
 	}.Run()); err != nil {
-		walk.MsgBox(nil, "错误", "程序启动失败: "+err.Error(), walk.MsgBoxIconError)
+		fmt.Println(err)
 	}
 }
 
@@ -87,8 +88,10 @@ func handleRoute(input, action string, log *walk.TextEdit) {
 	for _, ip := range ips {
 		var cmd *exec.Cmd
 		if ip.To4() != nil {
+			// IPv4 使用 route 命令
 			cmd = exec.Command("route", action, ip.String(), "mask", "255.255.255.255")
 		} else {
+			// IPv6 使用 netsh 命令
 			if action == "add" {
 				cmd = exec.Command("netsh", "interface", "ipv6", "add", "route", ip.String()+"/128", "interface=1")
 			} else {
@@ -97,7 +100,7 @@ func handleRoute(input, action string, log *walk.TextEdit) {
 		}
 
 		output, _ := cmd.CombinedOutput()
-		log.AppendText(fmt.Sprintf("IP: %s -> %s\r\n", ip.String(), string(output)))
+		log.AppendText(fmt.Sprintf("结果 (%s): %s\r\n", ip.String(), string(output)))
 	}
-	log.AppendText("--- 执行完毕 ---\r\n\r\n")
+	log.AppendText("--- 操作完成 ---\r\n\r\n")
 }
