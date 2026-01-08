@@ -6,23 +6,44 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall" // 增加了这个包，用于处理兼容性
+	"syscall"
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 )
 
+// 使用底层 API 判断管理员权限，彻底解决 undefined 报错
+func isUserAdmin() bool {
+	var sid *syscall.SID
+	err := syscall.AllocateAndInitializeSid(
+		&syscall.SECURITY_NT_AUTHORITY,
+		2,
+		syscall.SECURITY_BUILTIN_DOMAIN_RID,
+		syscall.DOMAIN_ALIAS_RID_ADMINS,
+		0, 0, 0, 0, 0, 0,
+		&sid)
+	if err != nil {
+		return false
+	}
+	defer syscall.FreeSid(sid)
+
+	token := syscall.Token(0)
+	member, err := token.IsMember(sid)
+	if err != nil {
+		return false
+	}
+	return member
+}
+
 func init() {
 	if !strings.Contains(strings.Join(os.Args, ""), "-noderun") {
-		// 修复 win.IsUserAnAdmin 报错
-		if !win.IsUserAnAdmin() {
+		if !isUserAdmin() {
 			exe, _ := os.Executable()
 			cwd, _ := os.Getwd()
 			args := append([]string{"-noderun"}, os.Args[1:]...)
 			argStr := strings.Join(args, " ")
 
-			// 使用 syscall 替代 win.UTF16PtrFromString 解决兼容性报错
 			verbPtr, _ := syscall.UTF16PtrFromString("runas")
 			exePtr, _ := syscall.UTF16PtrFromString(exe)
 			cwdPtr, _ := syscall.UTF16PtrFromString(cwd)
